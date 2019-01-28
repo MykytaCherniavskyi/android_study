@@ -12,8 +12,14 @@ import android.widget.EditText;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+
 public class MainActivity extends AppCompatActivity implements View.OnClickListener, RadioGroup.OnCheckedChangeListener {
 
+    private static final String FILE = "dbResult";
     private Button updateBtn;
     private Button deleteBtn;
     private Button addBtn;
@@ -29,7 +35,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private RadioGroup sortGroup;
 
-    private RadioButton sort;
     private String orderBy;
 
     DBHelper dbHelper;
@@ -64,12 +69,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         //sort group
         sortGroup = findViewById(R.id.sortGroup);
         sortGroup.setOnCheckedChangeListener(this);
-
-        int checkedRadioButtonId = sortGroup.getCheckedRadioButtonId();
-
-        // Найдём переключатель по его id
-        RadioButton sort = findViewById(checkedRadioButtonId);
-        orderBy = sort.getText().toString().toLowerCase();
+        orderBy = "not order";
 
         dbHelper = new DBHelper(this);
     }
@@ -79,26 +79,48 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         /*
          * query return Cursor - набор строк с данными
          * */
-        Cursor cursor = database.query(DBHelper.TABLE_CONTACTS, null, null, null, null, null, null);
+        try {
+            Cursor cursor = database.query(DBHelper.TABLE_CONTACTS, null, null, null, null, null, orderBy);
 
-        if (cursor.moveToFirst()) {
-            int idIndex = cursor.getColumnIndex(DBHelper.KEY_PERSON_ID);
-            int nameIndex = cursor.getColumnIndex(DBHelper.KEY_FIRST_NAME);
-            int secondNameIndex = cursor.getColumnIndex(DBHelper.KEY_SECOND_NAME);
-            int emailIndex = cursor.getColumnIndex(DBHelper.KEY_EMAIL);
-            int addressIndex = cursor.getColumnIndex(DBHelper.KEY_HOME_ADDRESS);
+            if (cursor.moveToFirst()) {
+                int idIndex = cursor.getColumnIndex(DBHelper.KEY_PERSON_ID);
+                int nameIndex = cursor.getColumnIndex(DBHelper.KEY_FIRST_NAME);
+                int secondNameIndex = cursor.getColumnIndex(DBHelper.KEY_SECOND_NAME);
+                int emailIndex = cursor.getColumnIndex(DBHelper.KEY_EMAIL);
+                int addressIndex = cursor.getColumnIndex(DBHelper.KEY_HOME_ADDRESS);
 
-            do {
-                Log.i("MyDatabase", "ID = " + cursor.getInt(idIndex) +
-                        ", name - " + cursor.getString(nameIndex) +
-                        ", surname - " + cursor.getString(secondNameIndex) +
-                        ", email - " + cursor.getString(emailIndex) +
-                        ", address - " + cursor.getString(addressIndex));
-            } while (cursor.moveToNext());
-        } else {
-            Log.i("MyDatabase", "0 rows");
+                //Запись в файл
+                BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(openFileOutput(FILE,MODE_PRIVATE)));
+
+                do {
+                    bw.write("ID = " + cursor.getInt(idIndex) +
+                            ", name - " + cursor.getString(nameIndex) +
+                            ", surname - " + cursor.getString(secondNameIndex) +
+                            ", email - " + cursor.getString(emailIndex) +
+                            ", address - " + cursor.getString(addressIndex) +
+                            '\n');
+                } while (cursor.moveToNext());
+
+                bw.close();
+            } else {
+                Log.i("MyDatabase", "0 rows");
+            }
+            cursor.close();
+
+            //Считывание из файла
+            BufferedReader br = new BufferedReader( new InputStreamReader(openFileInput(FILE)));
+
+            String str = "";
+
+            while ((str = br.readLine()) != null) {
+                Log.i("MyDatabase",str);
+            }
+
+            br.close();
+        } catch (Exception e) {
+                Log.i("My database",e.getMessage());
         }
-        cursor.close();
+
     }
 
 
@@ -136,11 +158,22 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         switch (v.getId()) {
 
             case R.id.update:
+                if (id.equalsIgnoreCase("")) break;
 
+                contentValues.put(DBHelper.KEY_FIRST_NAME, name);
+                contentValues.put(DBHelper.KEY_SECOND_NAME, surname);
+                contentValues.put(DBHelper.KEY_EMAIL, email);
+                contentValues.put(DBHelper.KEY_HOME_ADDRESS, address);
+                // = ? из массива аргументов подставиться нужный ид
+                //в данном слечае из массива String, а так если будет несколько аргументов, то подставит по порядку
+                Log.i("MyDatabase", "update row with id - " + id);
+                database.update(DBHelper.TABLE_CONTACTS,contentValues,DBHelper.KEY_PERSON_ID + "= ?", new String[]{id});
                 break;
             case R.id.delete:
+                if (id.equalsIgnoreCase("")) break;
+
                 Log.i("MyDatabase", "delete row with id - " + id);
-                database.delete(DBHelper.TABLE_CONTACTS, null, new String[]{id});
+                database.delete(DBHelper.TABLE_CONTACTS,DBHelper.KEY_PERSON_ID + "= " + id, null);
                 break;
             case R.id.addBtn:
 
@@ -158,15 +191,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                 break;
             case R.id.readBtn:
-                readData(database,orderBy);
+                Log.i("MyDatabase", "Read all with orderBy" + orderBy);
+                readData(database,null);
                 break;
             case R.id.clearBtn:
-                Log.i("MyDatabase", "delete all database");
+                Log.i("MyDatabase", "delete all rows");
                 database.delete(DBHelper.TABLE_CONTACTS, null, null);
-
                 break;
             case R.id.sortBtn:
-
+                if (orderBy.equalsIgnoreCase("not order")) break;
+                readData(database,orderBy);
                 break;
 
         }
@@ -177,13 +211,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public void onCheckedChanged(RadioGroup group, int checkedId) {
         switch (checkedId) {
             case R.id.sortNameRadio:
-                orderBy = "name";
+                orderBy = "_first_name";
                 break;
             case R.id.surnameNameRadio:
-                orderBy = "surname";
+                orderBy = "_second_name";
                 break;
             case R.id.emailRadio:
-                orderBy = "email";
+                orderBy = "_email";
                 break;
         }
     }
